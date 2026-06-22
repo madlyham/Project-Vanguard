@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Secure ESP Server Terminal</title>
+    <style>
+        body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
+        input, button { padding: 10px; margin: 5px; background: #111; color: #0f0; border: 1px solid #0f0; }
+        button { cursor: pointer; font-weight: bold; }
+        button:hover { background: #0f0; color: #000; }
+        #chat { border: 1px solid #0f0; padding: 10px; height: 300px; overflow-y: auto; margin-bottom: 10px; background: #0a0a0a; }
+        .sys-msg { color: #ffaa00; } /* Yellow for system alerts */
+        .err-msg { color: #ff0000; } /* Red for errors */
+        #status { font-weight: bold; margin-bottom: 15px; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <h2>SECURE ESP SERVER TERMINAL</h2>
+    <div id="status" class="err-msg">CONNECTION STATUS: OFFLINE (Awaiting Biometrics...)</div>
+    
+    <div id="chat"></div>
+    
+    <input type="text" id="msgBox" placeholder="Enter message to flash on LCD..." size="50">
+    <button onclick="sendData()">TRANSMIT TO SERVER</button>
+
+    <script>
+        // Default IP for ESP8266 in Access Point (AP) mode
+        const espIP = "http://192.168.4.1"; 
+
+        function logToChat(sender, text, type = "normal") {
+            const chatBox = document.getElementById("chat");
+            if (type === "system") {
+                chatBox.innerHTML += `<span class="sys-msg">[SYSTEM]: ${text}</span><br>`;
+            } else if (type === "error") {
+                chatBox.innerHTML += `<span class="err-msg">[ERROR]: ${text}</span><br>`;
+            } else {
+                chatBox.innerHTML += `<b>[${sender}]:</b> ${text}<br>`;
+            }
+            chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to bottom
+        }
+
+        function sendData() {
+            let msg = document.getElementById("msgBox").value;
+            if (!msg) return;
+
+            // Send the text to the ESP. Expected ESP endpoint: /send?msg=YourMessage
+            let url = `${espIP}/send?msg=${encodeURIComponent(msg)}`;
+            
+            fetch(url)
+                .then(response => {
+                    if (response.ok) {
+                        logToChat("Laptop", msg);
+                        logToChat("Server", "Message received. Activating Servo & LCD.", "system");
+                        document.getElementById("msgBox").value = "";
+                    } else {
+                        throw new Error("Server rejected request");
+                    }
+                })
+                .catch(err => {
+                    logToChat("Network", "Transmission failed. Is the ESP Wi-Fi on? (Requires Fingerprint)", "error");
+                });
+        }
+
+        function checkConnection() {
+            // Poll a simple /status endpoint to see if the ESP Wi-Fi is active
+            fetch(`${espIP}/status`)
+                .then(response => {
+                    if(response.ok) {
+                        document.getElementById("status").innerText = "CONNECTION STATUS: ONLINE & SECURED";
+                        document.getElementById("status").style.color = "#0f0"; // Green
+                    }
+                })
+                .catch(error => {
+                    document.getElementById("status").innerText = "CONNECTION STATUS: OFFLINE (Awaiting Biometrics...)";
+                    document.getElementById("status").style.color = "#f00"; // Red
+                });
+        }
+
+        // Auto-poll the server every 3 seconds to detect when the Wi-Fi turns on
+        setInterval(checkConnection, 3000);
+        
+        // Initial boot log
+        logToChat("System", "Booting terminal... Waiting for server network.", "system");
+    </script>
+</body>
+</html>
